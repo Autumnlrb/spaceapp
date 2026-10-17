@@ -1,0 +1,59 @@
+name: Supplemental Linux validation for PR 137
+on:
+  push:
+    branches: [codex/worker-otlp61-validation]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: worker-otlp61-validation
+  cancel-in-progress: true
+jobs:
+  linux-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 0ac31a86566124eb9f329c79ec805121b68bc35b
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Immutable export provenance diagnostic (expected mismatch on contributions)
+        continue-on-error: true
+        run: node scripts/verify-export-provenance.mjs .
+      - name: Create sanitized candidate
+        run: node scripts/public-export.mjs --output "$RUNNER_TEMP/spaceapp-public-export"
+      - name: Install candidate dependencies
+        id: install
+        working-directory: ${{ runner.temp }}/spaceapp-public-export
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+        run: npm ci
+      - name: Install ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+      - name: Public release tests
+        working-directory: ${{ runner.temp }}/spaceapp-public-export
+        run: npm run test:public
+      - name: Typecheck candidate
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        working-directory: ${{ runner.temp }}/spaceapp-public-export
+        run: npm run check
+      - name: Build candidate
+        id: build
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        working-directory: ${{ runner.temp }}/spaceapp-public-export
+        run: npm run build
+      - name: Pack launcher candidate
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        working-directory: ${{ runner.temp }}/spaceapp-public-export
+        run: npm run pack:dry-run -w run-spaceapp
+      - name: Dependency audit
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        working-directory: ${{ runner.temp }}/spaceapp-public-export
+        run: npm audit --audit-level=high
+      - name: Public export verification
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run public:export:verify
