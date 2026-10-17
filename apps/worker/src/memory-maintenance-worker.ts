@@ -1,3 +1,4 @@
+import { createWorkerTracing } from "./worker-tracing.js";
 import { fileURLToPath } from "node:url";
 import { NativeConnection, Worker } from "@temporalio/worker";
 import * as activities from "./memory-maintenance-activities.js";
@@ -13,6 +14,7 @@ const service = "space-memory-maintenance-worker";
 if (!memoryMaintenanceEnabled(process.env)) {
   console.log(JSON.stringify({ service, status: "disabled" }));
 } else {
+  const tracing = createWorkerTracing(service);
   const address = process.env.SPACE_TEMPORAL_ADDRESS ?? DEFAULT_TEMPORAL_ADDRESS;
   const namespace = process.env.SPACE_TEMPORAL_NAMESPACE ?? DEFAULT_TEMPORAL_NAMESPACE;
   const workflowsPath = fileURLToPath(new URL("./memory-maintenance-workflows.js", import.meta.url));
@@ -25,7 +27,8 @@ if (!memoryMaintenanceEnabled(process.env)) {
       taskQueue: MEMORY_MAINTENANCE_TASK_QUEUE,
       workflowsPath,
       activities,
-      ...memoryMaintenanceWorkerOptions
+      ...memoryMaintenanceWorkerOptions,
+      ...tracing.options
     });
     console.log(JSON.stringify({
       service,
@@ -35,7 +38,7 @@ if (!memoryMaintenanceEnabled(process.env)) {
       taskQueue: MEMORY_MAINTENANCE_TASK_QUEUE,
       activityConcurrency: memoryMaintenanceWorkerOptions.maxConcurrentActivityTaskExecutions
     }));
-    await worker.run();
+    try { await worker.run(); } finally { await tracing.close(); }
   } catch (error) {
     console.error(JSON.stringify({
       service,
