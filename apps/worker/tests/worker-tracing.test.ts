@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import Fastify from "fastify";
 import { TestWorkflowEnvironment } from "@temporalio/testing";
 import { ApplicationFailure } from "@temporalio/common";
+import { Client } from "@temporalio/client";
 import { Worker, bundleWorkflowCode, type WorkflowBundleWithSourceMap } from "@temporalio/worker";
 import { createOtlpSpanExporter } from "@space/runtime/otlp-span-exporter";
 import { continuationFixture } from "./room-continuation-fixture.js";
@@ -101,11 +102,17 @@ describe("worker tracing with real Temporal histories", () => {
     const app = Fastify({ genReqId: () => `req:goal-trace-${++requestNumber}` }), f = continuationFixture();
     app.addHook("onRequest", async req => { requestTraceContexts.remember(req.id, traceContextForRawRequest(req.raw)); observation.onRequest(req); });
     app.addHook("onResponse", async (req, reply) => observation.onResponse(req, reply));
+    // The outer execute already unlocks the test server's clock. A second
+    // time-skipping result() inside an activity can expire that activity while
+    // its HTTP handler is still returning, causing spurious retries and a
+    // worker shutdown that waits on the retried request. Use a production
+    // client for this nested API call so only the outer wait advances time.
+    const apiClient = new Client({ connection: env.connection });
     const starter = new TemporalCodexAppServerTurnStarter({ address: "test", namespace: "default", taskQueue: "trace-goal",
-      clientFactory: async () => ({ client: env.client, close: async () => undefined }) });
+      clientFactory: async () => ({ client: apiClient, close: async () => undefined }) });
     registerDotGoalRoutes(app, { step: async (_goalId: string, requestId: string) => {
       const started = await starter.start({ ...f.initial.queueItem.turn, traceId: requestId });
-      await env.client.workflow.getHandle(started.workflowId).result();
+      await apiClient.workflow.getHandle(started.workflowId).result();
       return { state: "DONE", goal: { status: "COMPLETED" } };
     } } as never, null, { routeOptions: {}, authenticatedOwner: async () => "user:test" });
     const internalFetch: typeof fetch = async (url, init) => {
@@ -120,6 +127,8 @@ describe("worker tracing with real Temporal histories", () => {
     try {
       await worker.runUntil(async () => { expect((await app.inject({ method: "POST", url: "/start-goal", headers: { traceparent: upstream } })).statusCode).toBe(200); });
       await Promise.all([tracing.close(), apiExporter.close()]);
+      expect(c.spans.filter(s => s.name === "activity dotGoalStep")).toHaveLength(1);
+      expect(c.spans.filter(s => s.name === "codexAppServerTurnWorkflow")).toHaveLength(1);
       const goal = c.spans.find(s => s.name === "dotGoalWorkflow")!, step = c.spans.find(s => s.name === "activity dotGoalStep")!;
       const internal = c.spans.find(s => s.kind === 2 && s.parentSpanId === step.spanId)!;
       const turn = c.spans.find(s => s.name === "codexAppServerTurnWorkflow")!, activity = c.spans.find(s => s.name === "activity runCodexAppServerTurn")!;
