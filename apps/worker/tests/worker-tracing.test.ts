@@ -81,7 +81,7 @@ describe("worker tracing with real Temporal histories", () => {
       const api = c.spans.find(s => s.kind === 2)!;
       const parent = c.spans.find(s => s.name === "memoryMaintenanceWorkflow")!;
       const child = c.spans.find(s => s.name === "memoryConsolidationWorkflow")!;
-      const remote = c.spans.find(s => s.name === "executePersistedMemoryChangeSet")!;
+      const remote = c.spans.find(s => s.name === "activity executePersistedMemoryChangeSet")!;
       expect(api).toBeDefined(); expect(parent.parentSpanId).toBe(api.spanId); expect(child.parentSpanId).toBe(parent.spanId);
       expect(remote.parentSpanId).toBe(child.spanId); expect(remote.service).toBe("space-memory-mutation-worker");
       expect(new Set(c.spans.map(s => s.traceId))).toEqual(new Set([traceId]));
@@ -120,9 +120,9 @@ describe("worker tracing with real Temporal histories", () => {
     try {
       await worker.runUntil(async () => { expect((await app.inject({ method: "POST", url: "/start-goal", headers: { traceparent: upstream } })).statusCode).toBe(200); });
       await Promise.all([tracing.close(), apiExporter.close()]);
-      const goal = c.spans.find(s => s.name === "dotGoalWorkflow")!, step = c.spans.find(s => s.name === "dotGoalStep")!;
+      const goal = c.spans.find(s => s.name === "dotGoalWorkflow")!, step = c.spans.find(s => s.name === "activity dotGoalStep")!;
       const internal = c.spans.find(s => s.kind === 2 && s.parentSpanId === step.spanId)!;
-      const turn = c.spans.find(s => s.name === "codexAppServerTurnWorkflow")!, activity = c.spans.find(s => s.name === "runCodexAppServerTurn")!;
+      const turn = c.spans.find(s => s.name === "codexAppServerTurnWorkflow")!, activity = c.spans.find(s => s.name === "activity runCodexAppServerTurn")!;
       expect(step.parentSpanId).toBe(goal.spanId); expect(internal).toBeDefined(); expect(turn.parentSpanId).toBe(internal.spanId);
       expect(activity.parentSpanId).toBe(turn.spanId); expect(c.spans.some(s => s.kind === 2 && s.spanId === goal.parentSpanId)).toBe(true);
       expect(c.spans.every(s => s.traceId === traceId)).toBe(true);
@@ -169,7 +169,7 @@ describe("worker tracing with real Temporal histories", () => {
         args: [{ traceId: "req:turn", traceparent: upstream, prompt: "secret prompt", roomId: "room:test", paneId: "pane:test" }] }));
       await tracing.close();
       const wf = c.spans.find(s => s.name === "codexAppServerTurnWorkflow")!;
-      const acts = c.spans.filter(s => s.name === "runCodexAppServerTurn");
+      const acts = c.spans.filter(s => s.name === "activity runCodexAppServerTurn");
       expect(acts).toHaveLength(2); expect(new Set(acts.map(s => s.spanId)).size).toBe(2);
       expect(acts.map(s => attrs(s)["space.attempt"]).sort()).toEqual(["1", "2"]);
       expect(acts.every(s => s.parentSpanId === wf.spanId && s.traceId === traceId)).toBe(true);
@@ -204,7 +204,7 @@ describe("worker tracing with real Temporal histories", () => {
       await tracing.close();
       const node = c.spans.filter(s => s.traceId === laterTrace && s.name === "laterRequestTrace"); expect(node).toHaveLength(1);
       expect(node[0]!.parentSpanId).toBe("2222222222222222");
-      const acts = c.spans.filter(s => s.name === "perRequest"); expect(acts).toHaveLength(2);
+      const acts = c.spans.filter(s => s.name === "activity perRequest"); expect(acts).toHaveLength(2);
       expect(acts.every(s => s.traceId === laterTrace && s.parentSpanId === node[0]!.spanId)).toBe(true);
       expect(node[0]!.links ?? []).toEqual([]); // no link to a root that was never emitted
     } finally { await tracing.close(); await c.close(); }
@@ -257,7 +257,7 @@ describe("worker tracing with real Temporal histories", () => {
           const monitor = roots.find(s => s !== first)!;
           expect(monitor.parentSpanId).toBe(first.spanId); expect(monitor.links).toContainEqual({ traceId, spanId: first.spanId });
           expect(attrs(monitor)["space.run_id"]).not.toBe(attrs(first)["space.run_id"]);
-          const prepare = c.spans.find(s => s.name === "prepareRoomAgentBackgroundContinuation")!;
+          const prepare = c.spans.find(s => s.name === "activity prepareRoomAgentBackgroundContinuation")!;
           expect(prepare.parentSpanId).toBe(monitor.spanId); expect(c.spans.every(s => s.traceId === traceId)).toBe(true);
         } finally { await handle.cancel(); await handle.result().catch(() => undefined); }
       });
@@ -279,13 +279,13 @@ describe("worker tracing with real Temporal histories", () => {
       await worker.runUntil(async () => {
         const handle = await env.client.workflow.start("roomAgentSupervisorWorkflow", { taskQueue: "trace-generations", workflowId: "trace:generations", args: [{ roomId: f.room.id, pending: [item] }] });
         try {
-          await vi.waitFor(async () => { await tracing.exporter!.flush(); expect(c.spans.filter(s => s.name === "prepareRoomAgentBackgroundContinuation")).toHaveLength(3); }, { timeout: 20_000 });
+          await vi.waitFor(async () => { await tracing.exporter!.flush(); expect(c.spans.filter(s => s.name === "activity prepareRoomAgentBackgroundContinuation")).toHaveLength(3); }, { timeout: 20_000 });
           const roots = c.spans.filter(s => s.name === "roomAgentSupervisorWorkflow" && !s.parentSpanId);
           expect(roots).toHaveLength(3); // first background paused then completed, second generation completed
           expect(new Set(c.spans.map(s => `${s.traceId}:${s.spanId}`)).size).toBe(c.spans.length);
           for (const root of roots) {
             expect(root.links).toHaveLength(1);
-            expect(c.spans.some(s => s.traceId === root.links![0]!.traceId && s.spanId === root.links![0]!.spanId && s.name === "prepareRoomAgentBackgroundContinuation")).toBe(true);
+            expect(c.spans.some(s => s.traceId === root.links![0]!.traceId && s.spanId === root.links![0]!.spanId && s.name === "activity prepareRoomAgentBackgroundContinuation")).toBe(true);
           }
           expect(new Set(roots.map(s => s.traceId)).size).toBe(2);
         } finally { await handle.cancel(); await handle.result().catch(() => undefined); }

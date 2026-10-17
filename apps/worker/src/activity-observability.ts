@@ -139,6 +139,8 @@ export interface ObserveActivityDependencies {
   now?: () => number;
   cancelled?: () => boolean;
   spanExporter?: SpanExporter | null;
+  /** Compatibility with existing callers supplying an activity exporter. */
+  spans?: SpanExporter | null;
   traceCarrier?: TraceCarrier | null;
 }
 
@@ -156,7 +158,10 @@ export async function observeActivityExecution<T>(
     ? Math.max(0, startedAt - info.currentAttemptScheduledTimestampMs)
     : null;
   const correlation = activityCorrelation(args);
-  const parent = parseTraceparent(dependencies.traceCarrier?.traceparent);
+  const inputCorrelation: Partial<Record<CorrelationKey, string>> = {};
+  for (const arg of args) readCorrelation(arg, inputCorrelation, 2);
+  const parent = parseTraceparent(dependencies.traceCarrier?.traceparent) ?? parseTraceparent(inputCorrelation.traceparent);
+  const spanExporter = dependencies.spanExporter ?? dependencies.spans;
   if (parent) correlation.w3cTraceId = parent.traceId;
   if (!correlation.traceId && dependencies.traceCarrier?.spaceTraceId) correlation.traceId = dependencies.traceCarrier.spaceTraceId;
   const base: Record<string, WorkerLogValue> = {
@@ -189,11 +194,11 @@ export async function observeActivityExecution<T>(
     // Only the bounded, synchronous enqueue runs on the activity path. Network
     // export is asynchronous and errors cannot alter the activity outcome.
     const traceId = parent?.traceId ?? correlation.w3cTraceId;
-    if (dependencies.spanExporter && traceId && info.workflowExecution) {
-      try { dependencies.spanExporter.record({ traceId,
+    if (spanExporter && traceId && info.workflowExecution) {
+      try { spanExporter.record({ traceId,
         spanId: spanIdFor(`activity:${info.workflowExecution.runId}:${info.activityId}:${info.attempt}`),
         parentSpanId: parent?.parentId ?? workflowSpanId(info.workflowExecution.runId),
-        name: activityType, kind: 1, startTimeUnixNano: BigInt(Math.trunc(startedAt)) * 1_000_000n,
+        name: `activity ${activityType}`, kind: 1, startTimeUnixNano: BigInt(Math.trunc(startedAt)) * 1_000_000n,
         endTimeUnixNano: BigInt(Math.trunc(startedAt + durationMs)) * 1_000_000n,
         error: outcome !== "COMPLETED", attributes: safeWorkerAttributes({
           "space.trace_id": correlation.traceId, "space.workflow_id": info.workflowExecution.workflowId,

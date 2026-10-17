@@ -11,8 +11,10 @@ export default defineConfig({
       "@space/runtime/otlp-span-exporter": resolve(__dirname, "../../packages/runtime/src/otlp-span-exporter.ts"),
       "@space/cli-host": resolve(__dirname, "../../packages/cli-host/src/index.ts"),
       "@space/db": resolve(__dirname, "../../packages/db/src/index.ts"),
+      "@space/gateway": resolve(__dirname, "../../packages/gateway/src/index.ts"),
       "@space/contracts": resolve(__dirname, "../../packages/contracts/src/index.ts"),
-      "@space/runtime": resolve(__dirname, "../../packages/runtime/src/index.ts")
+      "@space/runtime": resolve(__dirname, "../../packages/runtime/src/index.ts"),
+      "@space/streaming": resolve(__dirname, "../../packages/streaming/src/index.ts")
     }
   },
   test: {

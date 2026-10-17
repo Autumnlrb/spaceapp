@@ -1,5 +1,5 @@
 /**
- * Optional OTLP/HTTP (JSON) export of API server spans. Off unless
+ * Optional OTLP/HTTP (JSON) export of API, workflow and activity spans. Off unless
  * SPACE_OTEL_EXPORTER_OTLP_ENDPOINT names a collector base URL (spans go to
  * `<base>/v1/traces`). No dependency, no collector required: Space logs stay
  * joinable by W3C trace id without it.
@@ -81,7 +81,7 @@ export function otlpTraceRequest(spans: readonly ServerSpan[], serviceName: stri
     resourceSpans: [{
       resource: { attributes: [{ key: "service.name", value: { stringValue: serviceName } }] },
       scopeSpans: [{
-        scope: { name: "space-api" },
+        scope: { name: serviceName },
         spans: spans.map(span => ({
           traceId: span.traceId,
           spanId: span.spanId,
