@@ -1,26 +1,8 @@
-name: Container matrix
+name: Container matrix / PR 137 fork verification
 
 on:
-  pull_request:
-    paths:
-      - "apps/**"
-      - "packages/**"
-      - "!packages/run-spaceapp/**"
-      - "deploy/docker/**"
-      - "starter-memory/**"
-      - "Dockerfile"
-      - "package-lock.json"
   push:
-    branches:
-      - main
-    paths:
-      - "apps/**"
-      - "packages/**"
-      - "!packages/run-spaceapp/**"
-      - "deploy/docker/**"
-      - "starter-memory/**"
-      - "Dockerfile"
-      - "package-lock.json"
+    branches: [codex/worker-otlp61-required-checks]
   workflow_dispatch:
 
 permissions:
@@ -48,6 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: b53d17a887c23d3990d6db3e1ce0bb9632248ded
           persist-credentials: false
 
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0

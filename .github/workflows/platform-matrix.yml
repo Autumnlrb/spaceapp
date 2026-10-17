@@ -1,14 +1,8 @@
-name: Platform matrix
+name: Platform matrix / PR 137 fork verification
 
 on:
-  pull_request:
-    paths:
-      - "packages/run-spaceapp/**"
-      - "package-lock.json"
-      - ".github/workflows/platform-matrix.yml"
   push:
-    branches:
-      - main
+    branches: [codex/worker-otlp61-required-checks]
   workflow_dispatch:
 
 permissions:
@@ -38,6 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: b53d17a887c23d3990d6db3e1ce0bb9632248ded
           persist-credentials: false
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
