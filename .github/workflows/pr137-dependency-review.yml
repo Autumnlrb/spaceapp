@@ -1,0 +1,22 @@
+name: Dependency review / PR 137 fixed refs
+on:
+  push:
+    branches:
+      - codex/worker-otlp61-dependency-review
+permissions:
+  contents: read
+jobs:
+  dependency-review:
+    name: Original dependency review against exact PR base and head
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: b53d17a887c23d3990d6db3e1ce0bb9632248ded
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294
+        with:
+          fail-on-severity: high
+          base-ref: 98bcb3859778b85951c6f15902fe82f156562f9e
+          head-ref: b53d17a887c23d3990d6db3e1ce0bb9632248ded
